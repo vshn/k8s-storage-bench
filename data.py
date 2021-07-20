@@ -100,12 +100,14 @@ class BenchData:
         unit = self.unit
         if unit == "KB/s":
             mean_of_means = humanize.naturalsize(mean_of_means * 1000, format="%.3f")
+            mean_of_means = f"{mean_of_means}/s"
             stdev_of_means = humanize.naturalsize(stdev_of_means * 1000, format="%.3f")
+            stdev_of_means = f"{stdev_of_means}/s"
         else:
             mean_of_means = f"{mean_of_means:.2f}{unit}"
             stdev_of_means = f"{stdev_of_means:.2f}{unit}"
 
-        return f"Mean {mean_of_means}/s +- {stdev_of_means}/s"
+        return f"Mean {mean_of_means} +- {stdev_of_means}"
 
 
 if __name__ == "__main__":

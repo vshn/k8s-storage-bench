@@ -74,6 +74,7 @@ class Benchmarks(UserDict):
             m = statistics.mean(d.means)
             if d.unit == "KB/s":
                 m = humanize.naturalsize(m * 1000, format="%.1f")
+                m = f"{m}/s"
             else:
                 if m > 1000:
                     m = m / 1000.0
@@ -82,7 +83,7 @@ class Benchmarks(UserDict):
                     unit = d.unit
                 m = f"{m:.1f} {unit}"
 
-            label = f"{label}, mean={m}/s"
+            label = f"{label}, mean={m}"
 
         return label
 
