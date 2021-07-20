@@ -1,0 +1,153 @@
+diff --git a/cmd/rootCmd.go b/cmd/rootCmd.go
+index 279d904..dfddae5 100644
+--- a/cmd/rootCmd.go
++++ b/cmd/rootCmd.go
+@@ -46,17 +46,18 @@ var (
+ 	namespace      string
+ 	containerImage string
+ 
+-	fioCheckerSize     string
+-	fioCheckerFilePath string
+-	fioCheckerTestName string
+-	fioCmd             = &cobra.Command{
++	fioCheckerSize        string
++	fioCheckerFilePath    string
++	fioCheckerTestName    string
++	fioCheckerExistingPVC string
++	fioCmd                = &cobra.Command{
+ 		Use:   "fio",
+ 		Short: "Runs an fio test",
+ 		Long:  `Run an fio test`,
+ 		Run: func(cmd *cobra.Command, args []string) {
+ 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+ 			defer cancel()
+-			Fio(ctx, output, storageClass, fioCheckerSize, namespace, fioCheckerTestName, fioCheckerFilePath, containerImage)
++			Fio(ctx, output, storageClass, fioCheckerSize, namespace, fioCheckerTestName, fioCheckerFilePath, containerImage, fioCheckerExistingPVC)
+ 		},
+ 	}
+ 
+@@ -87,6 +88,7 @@ func init() {
+ 	fioCmd.Flags().StringVarP(&fioCheckerFilePath, "fiofile", "f", "", "The path to a an fio config file.")
+ 	fioCmd.Flags().StringVarP(&fioCheckerTestName, "testname", "t", "", "The Name of a predefined kubestr fio test. Options(default-fio)")
+ 	fioCmd.Flags().StringVarP(&containerImage, "image", "i", "", "The container image used to create a pod.")
++	fioCmd.Flags().StringVarP(&fioCheckerExistingPVC, "existing-pvc", "p", "", "An existing PVC in the provided namespace to use for the benchmarks. Takes precedence over storageclass and volume size.")
+ 
+ 	rootCmd.AddCommand(csiCheckCmd)
+ 	csiCheckCmd.Flags().StringVarP(&storageClass, "storageclass", "s", "", "The name of a Storageclass. (Required)")
+@@ -146,7 +148,7 @@ func Baseline(ctx context.Context, output string) {
+ }
+ 
+ // Fio executes the FIO test.
+-func Fio(ctx context.Context, output, storageclass, size, namespace, jobName, fioFilePath string, containerImage string) {
++func Fio(ctx context.Context, output, storageclass, size, namespace, jobName, fioFilePath string, containerImage string, existingPVC string) {
+ 	cli, err := kubestr.LoadKubeCli()
+ 	if err != nil {
+ 		fmt.Println(err.Error())
+@@ -164,6 +166,7 @@ func Fio(ctx context.Context, output, storageclass, size, namespace, jobName, fi
+ 		FIOJobName:     jobName,
+ 		FIOJobFilepath: fioFilePath,
+ 		Image:          containerImage,
++		ExistingPVC:    existingPVC,
+ 	}); err != nil {
+ 		result = kubestr.MakeTestOutput(testName, kubestr.StatusError, err.Error(), fioResult)
+ 	} else {
+diff --git a/pkg/fio/fio.go b/pkg/fio/fio.go
+index 2cecdd0..360b746 100644
+--- a/pkg/fio/fio.go
++++ b/pkg/fio/fio.go
+@@ -66,6 +66,7 @@ type RunFIOArgs struct {
+ 	FIOJobFilepath string
+ 	FIOJobName     string
+ 	Image          string
++	ExistingPVC    string
+ }
+ 
+ func (a *RunFIOArgs) Validate() error {
+@@ -106,9 +107,24 @@ func (f *FIOrunner) RunFioHelper(ctx context.Context, args *RunFIOArgs) (*RunFIO
+ 		return nil, errors.Wrapf(err, "Unable to find namespace (%s)", args.Namespace)
+ 	}
+ 
+-	sc, err := f.fioSteps.storageClassExists(ctx, args.StorageClass)
+-	if err != nil {
+-		return nil, errors.Wrap(err, "Cannot find StorageClass")
++	pvc := &v1.PersistentVolumeClaim{}
++	if args.ExistingPVC != "" {
++		thepvc, err := f.fioSteps.getExistingPVC(ctx, args.Namespace, args.ExistingPVC)
++		if err != nil {
++			//return nil, errors.Wrapf(err, "Unable to find existing PVC (%s)", args.ExistingPVC)
++			fmt.Printf("Unable to find existing PVC (%s), continuing with StorageClass.", args.ExistingPVC)
++		}
++		pvc = thepvc
++		fmt.Println("Existing PVC found", pvc.Name)
++	}
++
++	sc := &sv1.StorageClass{}
++	if args.ExistingPVC == "" {
++		thesc, err := f.fioSteps.storageClassExists(ctx, args.StorageClass)
++		if err != nil {
++			return nil, errors.Wrap(err, "Cannot find StorageClass")
++		}
++		sc = thesc
+ 	}
+ 
+ 	configMap, err := f.fioSteps.loadConfigMap(ctx, args)
+@@ -124,14 +140,16 @@ func (f *FIOrunner) RunFioHelper(ctx context.Context, args *RunFIOArgs) (*RunFIO
+ 		return nil, errors.Wrap(err, "Failed to get test file name.")
+ 	}
+ 
+-	pvc, err := f.fioSteps.createPVC(ctx, args.StorageClass, args.Size, args.Namespace)
+-	if err != nil {
+-		return nil, errors.Wrap(err, "Failed to create PVC")
++	if args.ExistingPVC == "" {
++		pvc, err = f.fioSteps.createPVC(ctx, args.StorageClass, args.Size, args.Namespace)
++		if err != nil {
++			return nil, errors.Wrap(err, "Failed to create PVC")
++		}
++		defer func() {
++			_ = f.fioSteps.deletePVC(context.TODO(), pvc.Name, args.Namespace)
++		}()
++		fmt.Println("PVC created", pvc.Name)
+ 	}
+-	defer func() {
+-		_ = f.fioSteps.deletePVC(context.TODO(), pvc.Name, args.Namespace)
+-	}()
+-	fmt.Println("PVC created", pvc.Name)
+ 
+ 	pod, err := f.fioSteps.createPod(ctx, pvc.Name, configMap.Name, testFileName, args.Namespace, args.Image)
+ 	if err != nil {
+@@ -141,7 +159,11 @@ func (f *FIOrunner) RunFioHelper(ctx context.Context, args *RunFIOArgs) (*RunFIO
+ 		_ = f.fioSteps.deletePod(context.TODO(), pod.Name, args.Namespace)
+ 	}()
+ 	fmt.Println("Pod created", pod.Name)
+-	fmt.Printf("Running FIO test (%s) on StorageClass (%s) with a PVC of Size (%s)\n", testFileName, args.StorageClass, args.Size)
++	if args.ExistingPVC != "" {
++		fmt.Printf("Running FIO test (%s) on PVC (%s)\n", testFileName, args.ExistingPVC)
++	} else {
++		fmt.Printf("Running FIO test (%s) on StorageClass (%s) with a PVC of Size (%s)\n", testFileName, args.StorageClass, args.Size)
++	}
+ 	fioOutput, err := f.fioSteps.runFIOCommand(ctx, pod.Name, ContainerName, testFileName, args.Namespace)
+ 	if err != nil {
+ 		return nil, errors.Wrap(err, "Failed while running FIO test.")
+@@ -158,6 +180,7 @@ type fioSteps interface {
+ 	validateNamespace(ctx context.Context, namespace string) error
+ 	storageClassExists(ctx context.Context, storageClass string) (*sv1.StorageClass, error)
+ 	loadConfigMap(ctx context.Context, args *RunFIOArgs) (*v1.ConfigMap, error)
++	getExistingPVC(ctx context.Context, namespace string, existingPVC string) (*v1.PersistentVolumeClaim, error)
+ 	createPVC(ctx context.Context, storageclass, size, namespace string) (*v1.PersistentVolumeClaim, error)
+ 	deletePVC(ctx context.Context, pvcName, namespace string) error
+ 	createPod(ctx context.Context, pvcName, configMapName, testFileName, namespace string, image string) (*v1.Pod, error)
+@@ -208,6 +231,14 @@ func (s *fioStepper) loadConfigMap(ctx context.Context, args *RunFIOArgs) (*v1.C
+ 	return s.cli.CoreV1().ConfigMaps(args.Namespace).Create(ctx, configMap, metav1.CreateOptions{})
+ }
+ 
++func (s *fioStepper) getExistingPVC(ctx context.Context, namespace string, existingPVC string) (*v1.PersistentVolumeClaim, error) {
++	pvc, err := s.cli.CoreV1().PersistentVolumeClaims(namespace).Get(ctx, existingPVC, metav1.GetOptions{})
++	if err != nil {
++		return nil, err
++	}
++	return pvc, nil
++}
++
+ func (s *fioStepper) createPVC(ctx context.Context, storageclass, size, namespace string) (*v1.PersistentVolumeClaim, error) {
+ 	sizeResource, err := resource.ParseQuantity(size)
+ 	if err != nil {
