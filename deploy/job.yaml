@@ -26,6 +26,7 @@ spec:
         # - name: EXISTING_PVC
         #   value: my-existing-pvc
         image: quay.io/vshn/k8s-storage-bench:latest
+        imagePullPolicy: Always
         name: storage-bench
         tty: true
         volumeMounts:
