@@ -1,0 +1,19 @@
+name: Build Container Image for PRs
+on:
+  pull_request:
+    branches:
+    - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: quay.io/${{ github.repository }}
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: "0"
+    - name: Build Image
+      run: docker build -t ${IMAGE} .
+      env:
+        IMAGE_NAME: "${IMAGE}:test"

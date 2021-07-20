@@ -1,0 +1,31 @@
+name: Build & Push Container Image
+on:
+  push:
+    branches:
+    - main
+    tags:
+    - v*
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: quay.io/${{ github.repository }}
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: "0"
+    - name: Set image version latest
+      if: github.ref == 'refs/heads/main'
+      run: echo "VERSION=latest" >> ${GITHUB_ENV}
+    - name: Set image version from tag
+      if: startsWith(github.ref, 'refs/tags/v')
+      run: echo "VERSION=$(echo ${GITHUB_REF#refs/tags/})" >> ${GITHUB_ENV}
+    - name: Build Image
+      run: docker build -t ${IMAGE} .
+      env:
+        IMAGE_NAME: "${IMAGE}:${VERSION}"
+    - name: Push Image
+      run: |
+        docker login quay.io --username "${{ secrets.QUAY_IO_USERNAME }}" --password "${{ secrets.QUAY_IO_PASSWORD }}"
+        docker push "${IMAGE}:${VERSION}"
