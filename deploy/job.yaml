@@ -14,8 +14,6 @@ spec:
           value: "10"
         - name: VERBOSE
           value: "true"
-        - name: OUTPUT_FORMAT
-          value: json
         - name: BENCH_NAMESPACE
           valueFrom:
             fieldRef:
