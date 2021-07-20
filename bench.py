@@ -219,6 +219,7 @@ def run_benchmark(
     fio_config = render_fio_config(op, **bench["params"])
     results = []
     i = 0
+    retry = 0
     while i < iters:
         try:
             print(f"Executing iteration {i+1}", file=sys.stderr)
@@ -230,11 +231,18 @@ def run_benchmark(
                 pp.pprint(data)
             results.append(data)
             i = i + 1
+            retry = 0
             time.sleep(5)
         except Exception as e:
             print(f"Error during iteration {i}:")
             print(e)
-            print(f"Retrying iteration")
+            if retry < 3:
+                print("Retrying iteration")
+                retry = retry + 1
+            else:
+                print(f"Giving up on iteration {i} after {retry} tries")
+                i = i + 1
+                retry = 0
 
     if print_results:
         mean_of_means = statistics.mean([r["mean"] for r in results])
