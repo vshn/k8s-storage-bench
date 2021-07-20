@@ -1,0 +1,41 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: storage-bench-
+spec:
+  template:
+    spec:
+      containers:
+      - env:
+        - name: OUTPUT_DIRECTORY
+          value: /results
+        - name: BENCH_ITERATIONS
+          value: "10"
+        - name: VERBOSE
+          value: "true"
+        - name: OUTPUT_FORMAT
+          value: json
+        - name: BENCH_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        # Adjust this environment variable to the storage class(es) you want
+        # to benchmark. Multiple storage classes can be given as "sc1,sc2".
+        - name: STORAGE_CLASSES
+          value: local-path
+        # Uncomment the next entry to benchmark an existing PVC
+        # - name: EXISTING_PVC
+        #   value: my-existing-pvc
+        image: quay.io/vshn/k8s-storage-bench:latest
+        name: storage-bench
+        tty: true
+        volumeMounts:
+          - mountPath: /results
+            name: results
+      restartPolicy: Never
+      serviceAccountName: storage-bench
+      volumes:
+        - name: results
+          persistentVolumeClaim:
+            claimName: bench-results
