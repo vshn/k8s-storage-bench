@@ -209,7 +209,6 @@ def run_benchmark(
     bench,
     storageclass,
     iters=5,
-    print_results=False,
     verbose=False,
     existing_pvc=None,
     namespace=None,
@@ -227,7 +226,7 @@ def run_benchmark(
                 storageclass, fio_config, existing_pvc=existing_pvc, namespace=namespace
             )
             data = extract_results(op, result)
-            if print_results and verbose:
+            if verbose:
                 pp.pprint(data)
             results.append(data)
             i = i + 1
@@ -244,14 +243,13 @@ def run_benchmark(
                 i = i + 1
                 retry = 0
 
-    if print_results:
-        mean_of_means = statistics.mean([r["mean"] for r in results])
-        if len(results) > 1:
-            stdev_of_means = statistics.stdev([r["mean"] for r in results])
-        else:
-            stdev_of_means = 0
-        unit = op.unit
-        print(f"Mean {mean_of_means:.2f}{unit} +- {stdev_of_means:.2f}{unit}")
+    mean_of_means = statistics.mean([r["mean"] for r in results])
+    if len(results) > 1:
+        stdev_of_means = statistics.stdev([r["mean"] for r in results])
+    else:
+        stdev_of_means = 0
+    unit = op.unit
+    print(f"Mean {mean_of_means:.2f}{unit} +- {stdev_of_means:.2f}{unit}")
 
     return {
         "name": benchname,
