@@ -180,6 +180,10 @@ def plot_series(pdf, title, unit, labels, means, stddevs, ylims):
     typ_colors = {t: gen_colors(len(l) + 1, drop_high=True)[1:] for t, l in labels.items()}
 
     for typ in types:
+        clean_title = title
+        if typ == "read":
+            # Don't mention "no fsync" in read plots
+            clean_title = clean_title.strip(", no fsync")
         colors = typ_colors[typ]
         plt.figure(figsize=FIGSIZE_LEGEND)
         plt.xticks(xs)
@@ -195,7 +199,7 @@ def plot_series(pdf, title, unit, labels, means, stddevs, ylims):
         plt.xlabel("Iteration")
         plt.ylabel(unit)
         plt.tight_layout()
-        plt.title(f"{typ} {title}")
+        plt.title(f"{typ} {clean_title}")
         pdf.savefig()
         plt.close()
 
