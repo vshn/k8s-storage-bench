@@ -1,8 +1,8 @@
 diff --git a/cmd/rootCmd.go b/cmd/rootCmd.go
-index 279d904..dfddae5 100644
+index bb5dcc5..ebc5bd6 100644
 --- a/cmd/rootCmd.go
 +++ b/cmd/rootCmd.go
-@@ -46,17 +46,18 @@ var (
+@@ -49,17 +49,18 @@ var (
  	namespace      string
  	containerImage string
  
@@ -18,15 +18,15 @@ index 279d904..dfddae5 100644
  		Use:   "fio",
  		Short: "Runs an fio test",
  		Long:  `Run an fio test`,
- 		Run: func(cmd *cobra.Command, args []string) {
+ 		RunE: func(cmd *cobra.Command, args []string) error {
  			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
  			defer cancel()
--			Fio(ctx, output, storageClass, fioCheckerSize, namespace, fioCheckerTestName, fioCheckerFilePath, containerImage)
-+			Fio(ctx, output, storageClass, fioCheckerSize, namespace, fioCheckerTestName, fioCheckerFilePath, containerImage, fioCheckerExistingPVC)
+-			return Fio(ctx, output, outfile, storageClass, fioCheckerSize, namespace, fioCheckerTestName, fioCheckerFilePath, containerImage)
++			return Fio(ctx, output, outfile, storageClass, fioCheckerSize, namespace, fioCheckerTestName, fioCheckerFilePath, containerImage, fioCheckerExistingPVC)
  		},
  	}
  
-@@ -87,6 +88,7 @@ func init() {
+@@ -107,6 +108,7 @@ func init() {
  	fioCmd.Flags().StringVarP(&fioCheckerFilePath, "fiofile", "f", "", "The path to a an fio config file.")
  	fioCmd.Flags().StringVarP(&fioCheckerTestName, "testname", "t", "", "The Name of a predefined kubestr fio test. Options(default-fio)")
  	fioCmd.Flags().StringVarP(&containerImage, "image", "i", "", "The container image used to create a pod.")
@@ -34,23 +34,23 @@ index 279d904..dfddae5 100644
  
  	rootCmd.AddCommand(csiCheckCmd)
  	csiCheckCmd.Flags().StringVarP(&storageClass, "storageclass", "s", "", "The name of a Storageclass. (Required)")
-@@ -146,7 +148,7 @@ func Baseline(ctx context.Context, output string) {
+@@ -189,7 +191,7 @@ func PrintAndJsonOutput(result []*kubestr.TestOutput, output string, outfile str
  }
  
  // Fio executes the FIO test.
--func Fio(ctx context.Context, output, storageclass, size, namespace, jobName, fioFilePath string, containerImage string) {
-+func Fio(ctx context.Context, output, storageclass, size, namespace, jobName, fioFilePath string, containerImage string, existingPVC string) {
+-func Fio(ctx context.Context, output, outfile, storageclass, size, namespace, jobName, fioFilePath string, containerImage string) error {
++func Fio(ctx context.Context, output, outfile, storageclass, size, namespace, jobName, fioFilePath string, containerImage string, existingPVC string) error {
  	cli, err := kubestr.LoadKubeCli()
  	if err != nil {
  		fmt.Println(err.Error())
-@@ -164,6 +166,7 @@ func Fio(ctx context.Context, output, storageclass, size, namespace, jobName, fi
+@@ -207,6 +209,7 @@ func Fio(ctx context.Context, output, outfile, storageclass, size, namespace, jo
  		FIOJobName:     jobName,
  		FIOJobFilepath: fioFilePath,
  		Image:          containerImage,
 +		ExistingPVC:    existingPVC,
- 	}); err != nil {
+ 	})
+ 	if err != nil {
  		result = kubestr.MakeTestOutput(testName, kubestr.StatusError, err.Error(), fioResult)
- 	} else {
 diff --git a/pkg/fio/fio.go b/pkg/fio/fio.go
 index 2cecdd0..360b746 100644
 --- a/pkg/fio/fio.go
