@@ -13,7 +13,7 @@ import time
 from datetime import datetime
 from enum import Enum
 from pprint import PrettyPrinter
-from typing import Dict
+from typing import Dict, List, Union
 
 pp = PrettyPrinter(indent=2)
 
@@ -46,8 +46,12 @@ class Op(Enum):
         )
 
 
-def extract_results(op: Op, result: Dict):
+def extract_results(op: Op, result: Union[List,Dict]):
     try:
+        if isinstance(result, list):
+            print("Using first list entry from new kubestr output format")
+            result = result[0]
+        assert isinstance(result, dict)
         data = result["Raw"]["result"]["jobs"][0][op.value[0]]
     except Exception as e:
         print(e)
@@ -195,9 +199,10 @@ def run_kubestr(storage_class: str, fio_config: str, existing_pvc=None, namespac
     json_start = 0
     resultlines = result.splitlines()
     for idx, line in enumerate(resultlines):
-        if line.startswith("{"):
+        if line.startswith(("{", "[")):
             json_start = idx
             break
+    print(f"First json line: {json_start}")
     try:
         return json.loads("\n".join(resultlines[json_start:]))
     except:
