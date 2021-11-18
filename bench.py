@@ -201,7 +201,7 @@ def run_kubestr(storage_class: str, fio_config: str, existing_pvc=None, namespac
     try:
         return json.loads("\n".join(resultlines[json_start:]))
     except:
-        raise Exception(f"No JSON in kubestr output: {result.stdout}")
+        raise Exception(f"No JSON in kubestr output: {result}")
 
 
 def run_benchmark(
