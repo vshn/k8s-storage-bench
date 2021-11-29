@@ -52,7 +52,7 @@ index bb5dcc5..ebc5bd6 100644
  	if err != nil {
  		result = kubestr.MakeTestOutput(testName, kubestr.StatusError, err.Error(), fioResult)
 diff --git a/pkg/fio/fio.go b/pkg/fio/fio.go
-index 2cecdd0..360b746 100644
+index 2cecdd0..d76d85d 100644
 --- a/pkg/fio/fio.go
 +++ b/pkg/fio/fio.go
 @@ -66,6 +66,7 @@ type RunFIOArgs struct {
@@ -151,3 +151,20 @@ index 2cecdd0..360b746 100644
  func (s *fioStepper) createPVC(ctx context.Context, storageclass, size, namespace string) (*v1.PersistentVolumeClaim, error) {
  	sizeResource, err := resource.ParseQuantity(size)
  	if err != nil {
+@@ -253,6 +284,16 @@ func (s *fioStepper) createPod(ctx context.Context, pvcName, configMapName, test
+ 				Name:    ContainerName,
+ 				Command: []string{"/bin/sh"},
+ 				Args:    []string{"-c", "tail -f /dev/null"},
++				Resources: v1.ResourceRequirements{
++					Requests: v1.ResourceList{
++						v1.ResourceCPU:    *resource.NewMilliQuantity(500, resource.DecimalSI),
++						v1.ResourceMemory: *resource.NewQuantity(2*1024*1024*1024, resource.BinarySI),
++					},
++					Limits: v1.ResourceList{
++						v1.ResourceCPU:    *resource.NewMilliQuantity(1000, resource.DecimalSI),
++						v1.ResourceMemory: *resource.NewQuantity(4*1024*1024*1024, resource.BinarySI),
++					},
++				},
+ 				VolumeMounts: []v1.VolumeMount{
+ 					{Name: "persistent-storage", MountPath: VolumeMountPath},
+ 					{Name: "config-map", MountPath: ConfigMapMountPath},
